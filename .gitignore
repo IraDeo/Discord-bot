@@ -1,0 +1,35 @@
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Ignore environment files
+.env
+venv/
+env/
+*.venv
+*.env
+
+# Ignore IDE/editor files
+.vscode/
+*.swp
+.idea/
+*.DS_Store
+
+# Ignore logs and dumps
+*.log
+*.out
+*.pid
+
+# Ignore secrets & API keys
+config.json
+token.txt
+secrets.json
+
+# Ignore installed dependencies
+*.sqlite3
+node_modules/
