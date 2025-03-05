@@ -6,8 +6,8 @@ import yt_dlp
 import datetime
 import os
 
-TOKEN = "MTM0Njg2MDQ3ODgzNTU5MzI1OA.Gu4mYT.AIn_52ZrrksuzOab6-K8xfh2wyGFystxjnCO1c"
-GEMINI_API_KEY = "AIzaSyAWjdN4IcK6FVTgzu7PwsxuX_H5dkFlo7U"
+TOKEN = "MTM0Njg2MDQ3ODgzNTU5MzI1OAh.Gu4mYT.AIn_52ZrrksuzOabdw6-K8xfh2wyGFystxjnCO1c"
+GEMINI_API_KEY = "AIzaSyAWsjdN4IswbniwcK6FVTgzu7PwsxddduX_H5dkFlo7U"
 
 # Configure Gemini API
 genai.configure(api_key=GEMINI_API_KEY)
