@@ -5,44 +5,39 @@ import asyncio
 import yt_dlp
 import datetime
 import os
+from dotenv import load_dotenv
 
-TOKEN = "MTM0Njg2MDQ3ODgzNTU5MzI1OAh.Gu4mYT.AIn_52ZrrksuzOabdw6-K8xfh2wyGFystxjnCO1c"
-GEMINI_API_KEY = "AIzaSyAWsjdN4IswbniwcK6FVTgzu7PwsxddduX_H5dkFlo7U"
+load_dotenv()
 
-# Configure Gemini API
+TOKEN = os.getenv("TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-pro-latest") 
 
-# Bot setup
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
-# Music queue
 music_queue = []
 reminders = {}
-# Set bot command prefix
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name}")
+    print(f"✅ Logged in as {bot.user}")
+    bot.loop.create_task(cleanup_reminders())  # ✅ Run reminder cleanup
 
 @bot.command()
 async def hello(ctx):
     await ctx.send("Hello! I am your bot 🤖")
 # 🔹 AI Chat (Using Gemini API)
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
 
-    # Process the !chat command manually
-    if message.content.startswith("!chat "):
-        prompt = message.content.replace("!chat ", "")
-        model = genai.GenerativeModel("gemini-pro")  # model
-        response = model.generate_content(prompt)    #get response
-        await message.channel.send(response.text)    #send response to discord
-
-    # ✅ Ensure bot processes other commands
-    await bot.process_commands(message)
+@bot.command()
+async def chat(ctx, *, prompt: str):
+    """Handles the !chat command to get a response from Gemini AI"""
+    try:
+        response = model.generate_content(prompt)  # Generate AI response
+        await ctx.send(response.text)  # Send response to Discord
+    except Exception as e:
+        await ctx.send(f"❌ Error: {e}")
 
 # 🔹 Polls
 @bot.command()
@@ -83,8 +78,12 @@ async def cleanup_reminders():
 # 🔹 AI-Powered Summaries
 @bot.command()
 async def summarize(ctx, *, text: str):
-    response = genai.summarize(text)
-    await ctx.send(f"📄 **Summary:** {response.text}")
+    """Summarize long messages using Gemini AI"""
+    try:
+        response = model.generate_content(f"Summarize this: {text}")  # ✅ Proper usage
+        await ctx.send(f"📄 **Summary:** {response.text}")
+    except Exception as e:
+        await ctx.send(f"❌ Error: {e}")
 
 # 🔹 Custom Welcome Messages
 @bot.event
@@ -96,30 +95,58 @@ async def on_member_join(member):
 # 🔹 Music Player (Queue System)
 @bot.command()
 async def play(ctx, url: str):
-    voice_channel = ctx.author.voice.channel
-    if not voice_channel:
+    """Plays music from a YouTube URL"""
+    if not ctx.author.voice or not ctx.author.voice.channel:
         await ctx.send("❌ You must be in a voice channel!")
         return
 
-    voice = await voice_channel.connect() if not ctx.voice_client else ctx.voice_client
+    voice_channel = ctx.author.voice.channel
+    if ctx.voice_client is None:
+        voice = await voice_channel.connect()
+    else:
+        voice = ctx.voice_client
+
     music_queue.append(url)
-    
     if not voice.is_playing():
         await play_next(ctx)
-
 async def play_next(ctx):
-    if music_queue:
-        url = music_queue.pop(0)
-        ydl_opts = {'format': 'bestaudio'}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            url2 = info['url']
-        
-        ffmpeg_opts = {'options': '-vn'}
-        ctx.voice_client.play(discord.FFmpegPCMAudio(url2, **ffmpeg_opts), after=lambda e: asyncio.run(play_next(ctx)))
+    """Plays the next song in the queue"""
+    if not music_queue:
+        await ctx.send("🎵 Queue is empty, disconnecting.")
+        await ctx.voice_client.disconnect()
+        return
+
+    url = music_queue.pop(0)
+
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        audio_url = info['url']
+
+    ffmpeg_options = {
+        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+        'options': '-vn',
+    }
+
+    ctx.voice_client.play(
+        discord.FFmpegPCMAudio(audio_url, **ffmpeg_options),
+        after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
+    )
+
+    await ctx.send(f"🎶 Now playing: **{info['title']}**")
 
 @bot.command()
 async def queue(ctx):
+    """Shows the current queue"""
     if music_queue:
         queue_list = "\n".join([f"{i+1}. {url}" for i, url in enumerate(music_queue)])
         await ctx.send(f"🎵 **Music Queue:**\n{queue_list}")
@@ -128,21 +155,17 @@ async def queue(ctx):
 
 @bot.command()
 async def skip(ctx):
+    """Skips the current song"""
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
         await ctx.send("⏭ Skipping to the next song!")
-        await play_next(ctx)
 
 @bot.command()
 async def stop(ctx):
+    """Stops music and disconnects the bot"""
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("🔇 Stopped playing music.")
 
 # Run the bot
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user.name}")
-    bot.loop.create_task(cleanup_reminders())  # ✅ Fixes the coroutine warning
-
 bot.run(TOKEN)
